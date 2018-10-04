@@ -9,9 +9,13 @@ import (
 type File struct {
 	*os.File
 	Path           string
-	MaxFileSize    int64 // unit: Mbytes
-	MaxBackupFiles int64
+	MaxFileSize    int32 // unit: bytes 
+	MaxBackupFiles int32
+	currentFileSize int64 // unit: bytes	
 	writeLock      sync.Mutex
+}
+
+func NewLogger(path string, maxFileSize int32, maxBackupFiles int32) (File*, error) {
 }
 
 func (logger *File) Write(b []byte) (int, error) {
