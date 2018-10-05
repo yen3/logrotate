@@ -7,9 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -318,7 +316,7 @@ func TestNewLoggerAppendExistedFile(t *testing.T) {
 	assert.Equal(t, "aaaaa\nHello World!\n", logContent)
 }
 
-func WriteToRotateFile(logReader *os.File, lr *File, t *testing.T) {
+func WriteToRotateFile(logReader *os.File, lr *File, writeFinished chan bool, t *testing.T) {
 	for {
 		buf := make([]byte, 128)
 
@@ -326,21 +324,19 @@ func WriteToRotateFile(logReader *os.File, lr *File, t *testing.T) {
 		if err != nil {
 			lr.Close()
 
-			// Pipe is closed.
-			if pathError, ok := err.(*os.PathError); ok {
-				if strings.Contains(pathError.Err.Error(), "closed") {
-					return
-				}
-			}
-
-			// The other possibility
+			// The write pipe is closed
 			if err == io.EOF {
+				logReader.Close()
+				lr.Close()
+				writeFinished <- true
+				fmt.Println("Here")
 				return
 			}
 
 			// Should not happen
 			fmt.Println(err)
 			t.Fail()
+			writeFinished <- false
 			return
 		}
 
@@ -367,10 +363,10 @@ func TestStarProcessLog(t *testing.T) {
 
 	var procAttr os.ProcAttr
 	procAttr.Files = []*os.File{devnull, logWriter, logWriter}
-	go WriteToRotateFile(logReader, lr, t)
+	writeFinished := make(chan bool)
+	go WriteToRotateFile(logReader, lr, writeFinished, t)
 
-	//args := []string{"ping", "-c", "3", "www.google.com"}
-	args := []string{"bash", "-c", "for i in `seq 1 10`; do echo \"Hello World\"; done"}
+	args := []string{"bash", "-c", "for i in `seq 20`; do echo \"Hello World$i\"; done"}
 	assert.Nil(t, err)
 	args[0], err = exec.LookPath(args[0])
 
@@ -378,12 +374,14 @@ func TestStarProcessLog(t *testing.T) {
 	assert.Nil(t, err)
 
 	// Wait for the process
-	p.Wait()
+	_, err = p.Wait()
+	assert.Nil(t, err)
 
 	// Close the pipe
 	logWriter.Close()
-	logReader.Close()
 
-	// Need time to let goroutine aware the pipe is closed
-	time.Sleep(1000 * time.Millisecond)
+	// Wait until the reading is finished
+	writeState := <-writeFinished
+	fmt.Println(writeState)
+	assert.True(t, writeState)
 }
