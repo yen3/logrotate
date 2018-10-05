@@ -329,12 +329,10 @@ func WriteToRotateFile(logReader *os.File, lr *File, writeFinished chan bool, t 
 				logReader.Close()
 				lr.Close()
 				writeFinished <- true
-				fmt.Println("Here")
 				return
 			}
 
 			// Should not happen
-			fmt.Println(err)
 			t.Fail()
 			writeFinished <- false
 			return
@@ -384,4 +382,27 @@ func TestStarProcessLog(t *testing.T) {
 	writeState := <-writeFinished
 	fmt.Println(writeState)
 	assert.True(t, writeState)
+
+	files := []string{
+		"./test_logrotate/test-subprocess-2.log",
+		"./test_logrotate/test-subprocess-1.log",
+		"./test_logrotate/test-subprocess.log",
+	}
+	for i := range files {
+		assert.True(t, IsFileExists(files[i]))
+	}
+
+	var data string
+	for i := range files {
+		raw_data, err := ioutil.ReadFile(files[i])
+		assert.Nil(t, err)
+		data = data + string(raw_data)
+	}
+
+	var ansData string
+	for i := 1; i <= 20; i++ {
+		ansData = ansData + fmt.Sprintf("Hello World%d\n", i)
+	}
+
+	assert.Equal(t, data, ansData)
 }
