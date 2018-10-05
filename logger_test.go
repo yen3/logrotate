@@ -326,14 +326,14 @@ func WriteToRotateFile(logReader *os.File, lr *File, t *testing.T) {
 		if err != nil {
 			lr.Close()
 
-			// the pipe is closed
+			// Pipe is closed.
 			if pathError, ok := err.(*os.PathError); ok {
 				if strings.Contains(pathError.Err.Error(), "closed") {
 					return
 				}
 			}
 
-			// The other possible
+			// The other possibility
 			if err == io.EOF {
 				return
 			}
@@ -380,6 +380,7 @@ func TestStarProcessLog(t *testing.T) {
 	// Wait for the process
 	p.Wait()
 
+	// Close the pipe
 	logWriter.Close()
 	logReader.Close()
 
