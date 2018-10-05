@@ -99,19 +99,6 @@ func GenerateLogFilename(index int, dir string, basename string, extension strin
 	return fmt.Sprintf("%s/%s-%d%s", dir, basename, index, extension)
 }
 
-func ListLogFiles(pathInfo *PathMetadata, maxLogFiles int) ([]string, error) {
-	var logPaths []string
-	for i := 0; i <= maxLogFiles-1; i++ {
-		prevLogPath := GenerateLogFilename(i, pathInfo.BaseDir, pathInfo.Basename, pathInfo.Extension)
-
-		if IsFileExists(prevLogPath) {
-			logPaths = append(logPaths, prevLogPath)
-		}
-	}
-
-	return logPaths, nil
-}
-
 func (lr *File) listPreviousLogFiles() ([]string, error) {
 	var logPaths []string
 	for i := 0; i <= lr.MaxBackupFiles-1; i++ {
