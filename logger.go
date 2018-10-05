@@ -79,6 +79,7 @@ func NewLogger(path string, maxFileSize int64, maxBackupFiles int, endEntryMark 
 		lg.currentFileSize = GetFileSize(lg.PathInfo.Path)
 
 		if lg.currentFileSize >= lg.MaxFileSize {
+			fmt.Println("here")
 			// If the filesize is too big, delete the file rather than rotate it.
 			// Otherwise, do normal file rotation
 			if lg.currentFileSize >= lg.MaxFileSize*10 {
