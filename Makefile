@@ -4,6 +4,8 @@ test:
 	@mkdir -p test_logrotate
 	@touch test_logrotate/test-empty.log
 	@touch test_logrotate/test-empty-1.log
+	@touch test_logrotate/test-existing.log
+	@touch test_logrotate/test-existing-rotate.log
 	@# For file size test
 	@echo "hello world!" > test_logrotate/get-file-size-test.log
-	go test -v
+	go test -v $(TEST_ARGS)

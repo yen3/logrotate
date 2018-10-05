@@ -1,11 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 )
+
+const sepMark = byte('\n')
 
 type PathMetadata struct {
 	Path      string
@@ -19,7 +22,6 @@ type File struct {
 	PathInfo       *PathMetadata
 	MaxFileSize    int64 // unit: bytes
 	MaxBackupFiles int
-	EndEntryMark   string // TODO: implement with it
 
 	currentFileSize int64 // unit: bytes
 }
@@ -66,12 +68,11 @@ func NewPathMetadata(path string) *PathMetadata {
 	}
 }
 
-func NewLogger(path string, maxFileSize int64, maxBackupFiles int, endEntryMark string) (*File, error) {
+func NewLogger(path string, maxFileSize int64, maxBackupFiles int) (*File, error) {
 	lg := &File{
 		PathInfo:        NewPathMetadata(path),
 		MaxFileSize:     maxFileSize,
 		MaxBackupFiles:  maxBackupFiles,
-		EndEntryMark:    endEntryMark,
 		currentFileSize: 0,
 	}
 
@@ -79,23 +80,25 @@ func NewLogger(path string, maxFileSize int64, maxBackupFiles int, endEntryMark 
 		lg.currentFileSize = GetFileSize(lg.PathInfo.Path)
 
 		if lg.currentFileSize >= lg.MaxFileSize {
-			fmt.Println("here")
 			// If the filesize is too big, delete the file rather than rotate it.
 			// Otherwise, do normal file rotation
 			if lg.currentFileSize >= lg.MaxFileSize*10 {
-				err := os.Remove(lg.PathInfo.Path)
-				if err != nil {
+				if err := os.Remove(lg.PathInfo.Path); err != nil {
 					return nil, err
 				}
 			} else {
-				lg.rotateFiles()
+				if err := lg.rotateFiles(); err != nil {
+					return nil, err
+				}
 			}
 
 			lg.currentFileSize = 0
 		}
 	}
 
-	lg.openLogFile()
+	if err := lg.openLogFile(); err != nil {
+		return nil, err
+	}
 
 	return lg, nil
 }
@@ -131,7 +134,7 @@ func (lr *File) rotateFiles() error {
 
 	// Rotate files
 	for i := len(logPaths) - 2; i >= 0; i-- {
-		fmt.Println(logPaths[i], logPaths[i+1])
+		//fmt.Println(logPaths[i], logPaths[i+1])
 		if err = os.Rename(logPaths[i], logPaths[i+1]); err != nil {
 			log.Println(err)
 			return err
@@ -150,19 +153,67 @@ func (lr *File) Close() (err error) {
 	return lr.File.Close()
 }
 
-func (lr *File) Write(b []byte) (int, error) {
-	writeBytes, err := lr.File.Write(b)
+func (lr *File) truncateWriteFile(b []byte) ([]byte, error) {
+	buf := b
+	sepIndex := bytes.IndexByte(buf, sepMark)
 
+	// Write the remaining part of the entry or maybe it's a new entry
+	// and the entry is in the buffer totally.
+	//
+	// If the sepIndex is -1, it means the whole buffer can not form an
+	// entry. Continue to write the file until the sep is found then
+	// rotate
+	if sepIndex != -1 {
+		// Write the remaining part of the entry
+		temp_buf := buf[0 : sepIndex+1]
+		if _, err := lr.File.Write(temp_buf); err != nil {
+			return nil, err
+		}
+
+		if err := lr.File.Close(); err != nil {
+			return nil, err
+		}
+
+		// Rotate the file to backup file
+		if err := lr.rotateFiles(); err != nil {
+			return nil, err
+		}
+
+		// Reopen the file and reinit the filesize counter.
+		lr.openLogFile()
+		lr.currentFileSize = 0
+
+		// The buf would be written to next file.
+		// The writing action would be effect in the below code block.
+		buf = buf[sepIndex+1 : len(buf)]
+		if len(buf) == 0 {
+			return nil, nil
+		}
+	}
+
+	return buf, nil
+}
+
+func (lr *File) Write(b []byte) (int, error) {
+	buf := b
+	var err error
+
+	// Ready to rotate file
+	if lr.currentFileSize >= lr.MaxFileSize {
+		buf, err = lr.truncateWriteFile(b)
+		if err != nil {
+			return -1, err
+		}
+	}
+
+	// Write the file
+	writeBytes, err := lr.File.Write(buf)
 	if err != nil {
 		return writeBytes, err
 	}
 
+	// Update filesize
 	lr.currentFileSize += int64(writeBytes)
-	if lr.currentFileSize > lr.MaxFileSize {
-		lr.File.Close()
-		lr.rotateFiles()
-		lr.openLogFile()
-	}
 
 	return writeBytes, nil
 }

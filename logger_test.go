@@ -1,6 +1,9 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -25,6 +28,7 @@ func TestIsFileExists(t *testing.T) {
 }
 
 func TestGetFileSize(t *testing.T) {
+	assert.Equal(t, int64(0), GetFileSize("./test_logrotate/test-empty.log"))
 	assert.Equal(t, int64(len("hello world!")+1), GetFileSize("./test_logrotate/get-file-size-test.log"))
 }
 
@@ -78,13 +82,11 @@ func TestGenerateLogFilename(t *testing.T) {
 	}
 }
 
-func TestNewLogger(t *testing.T) {
+func TestNewLoggerEmptyLogFile(t *testing.T) {
 	currDir, _ := filepath.Abs(".")
 
-	lr, err := NewLogger("./test_logrotate/test.log", 1*1024*1024, 10, "\n")
-	if err != nil {
-		t.Fail()
-	}
+	lr, err := NewLogger("./test_logrotate/test.log", 1*1024*1024, 10)
+	assert.Nil(t, err)
 
 	// Check lr.PathInfo
 	pathInfo := lr.PathInfo
@@ -102,4 +104,212 @@ func TestNewLogger(t *testing.T) {
 	// Check close
 	err = lr.Close()
 	assert.Nil(t, err)
+
+	// Remove the test file
+	os.Remove(pathInfo.Path)
+}
+
+func TestNewLoggerExistingFile(t *testing.T) {
+	// Open
+	lr, err := NewLogger("./test_logrotate/test-existing.log", 1*1024*1024, 10)
+	assert.Nil(t, err)
+
+	assert.True(t, IsFileExists(lr.PathInfo.Path))
+	assert.Equal(t, int64(0), GetFileSize(lr.PathInfo.Path))
+
+	// Try to write log
+	msg := "hello world!\n"
+	lr.Write([]byte(msg))
+
+	// Close
+	err = lr.Close()
+	assert.Nil(t, err)
+
+	// Check write
+	assert.Equal(t, int64(len(msg)), GetFileSize(lr.PathInfo.Path))
+}
+
+func TestNewLoggerExistingFileRotate(t *testing.T) {
+	// Open
+	lr, err := NewLogger("./test_logrotate/test-existing-rotate.log", 20, 10)
+	assert.Nil(t, err)
+
+	assert.True(t, IsFileExists(lr.PathInfo.Path))
+	assert.Equal(t, int64(0), GetFileSize(lr.PathInfo.Path))
+
+	// Try to write log
+	msg := "123456789\n"
+
+	// First write, it will rotate in next write
+	lr.Write([]byte(msg))
+	lr.Write([]byte(msg))
+	// Write to file then rotate
+	lr.Write([]byte(msg))
+
+	// Write to second file
+	lr.Write([]byte(msg))
+
+	// Close
+	err = lr.Close()
+	assert.Nil(t, err)
+
+	// Check file
+	assert.Equal(t, int64(len(msg)), GetFileSize(lr.PathInfo.Path))
+	assert.Equal(t, int64(len(msg)*3), GetFileSize("./test_logrotate/test-existing-rotate-1.log"))
+}
+
+func TestLogRotate(t *testing.T) {
+	// Open
+	lr, err := NewLogger("./test_logrotate/test-rotate.log", 20, 10)
+	assert.Nil(t, err)
+
+	// Try to write log
+	msg := "1234\n5678\n"
+
+	// First write, it will rotate in next write
+	lr.Write([]byte(msg))
+	lr.Write([]byte(msg))
+	// Write to file then rotate
+	lr.Write([]byte(msg))
+
+	// Write to second file
+	lr.Write([]byte(msg))
+
+	// Close
+	err = lr.Close()
+	assert.Nil(t, err)
+
+	// Check file content
+	assert.Equal(t, int64(15), GetFileSize(lr.PathInfo.Path))
+	assert.Equal(t, int64(25), GetFileSize("./test_logrotate/test-rotate-1.log"))
+}
+
+func TestLogRotateNotFindSep(t *testing.T) {
+	// Open
+	lr, err := NewLogger("./test_logrotate/test-rotate-nosep.log", 20, 10)
+	assert.Nil(t, err)
+
+	// Try to write log
+	msg := "1234\n5678\n"
+
+	// First write, it will rotate in next write
+	lr.Write([]byte(msg))
+	lr.Write([]byte(msg))
+	// Write to file then rotate
+	lr.Write([]byte("12345678"))
+
+	// Write to second file
+	lr.Write([]byte(msg))
+
+	// Close
+	err = lr.Close()
+	assert.Nil(t, err)
+
+	//// Check file content
+	assert.Equal(t, int64(5), GetFileSize(lr.PathInfo.Path))
+	assert.Equal(t, int64(33), GetFileSize("./test_logrotate/test-rotate-nosep-1.log"))
+}
+
+func TestLogRotateReplace(t *testing.T) {
+	// Open
+	lr, err := NewLogger("./test_logrotate/test-rotate-replace.log", 20, 2)
+	assert.Nil(t, err)
+
+	msg := "ABCDEFGH"
+
+	// When write 7 logs. Since each file can contain 3 entry, the writing
+	// action would generate three files. The 1, 2 and 3 log would be
+	// elimimate, The first log file would contain log 7, and the second log
+	// file would contain log 4, 5 and 6.
+	for i := 1; i <= 7; i++ {
+		lr.Write([]byte(fmt.Sprintf("%s%d\n", msg, i)))
+	}
+
+	// Check file log
+	raw_log, err := ioutil.ReadFile("./test_logrotate/test-rotate-replace.log")
+	assert.Nil(t, err)
+
+	raw_log_2, err := ioutil.ReadFile("./test_logrotate/test-rotate-replace-1.log")
+	assert.Nil(t, err)
+
+	first_log := string(raw_log)
+	second_log := string(raw_log_2)
+
+	assert.Equal(t, first_log, "ABCDEFGH7\n")
+	assert.Equal(t, second_log, "ABCDEFGH4\nABCDEFGH5\nABCDEFGH6\n")
+}
+
+func TestNewLoggerRemoveBigLogFile(t *testing.T) {
+	// Create test log file
+	path := "./test_logrotate/test-big.log"
+
+	data := make([]byte, 101)
+	for i := range data {
+		data[i] = byte('a')
+	}
+	data = append(data, byte('\n'))
+
+	err := ioutil.WriteFile(path, data, 0644)
+	assert.Nil(t, err)
+
+	// Open
+	lr, err := NewLogger(path, 10, 2)
+	assert.Nil(t, err)
+	lr.Close()
+
+	// Check file size
+	assert.Equal(t, int64(0), GetFileSize(path))
+}
+
+func TestNewLoggerRotatePreLogFile(t *testing.T) {
+	// Create test log file
+	path := "./test_logrotate/test-rotate-first.log"
+
+	data := make([]byte, 20)
+	for i := range data {
+		data[i] = byte('a')
+	}
+	data = append(data, byte('\n'))
+
+	err := ioutil.WriteFile(path, data, 0644)
+	assert.Nil(t, err)
+
+	// Open
+	lr, err := NewLogger(path, 20, 2)
+	assert.Nil(t, err)
+	lr.Close()
+
+	// Check file size
+	assert.Equal(t, int64(0), GetFileSize(path))
+	assert.Equal(t, int64(21), GetFileSize("./test_logrotate/test-rotate-first-1.log"))
+}
+
+func TestNewLoggerAppendExistedFile(t *testing.T) {
+	// Create test log file
+	path := "./test_logrotate/test-append.log"
+	data := make([]byte, 5)
+	for i := range data {
+		data[i] = byte('a')
+	}
+	data = append(data, byte('\n'))
+
+	err := ioutil.WriteFile(path, data, 0644)
+	assert.Nil(t, err)
+
+	// Open
+	lr, err := NewLogger(path, 20, 2)
+	assert.Nil(t, err)
+
+	// Write file
+	lr.Write([]byte("Hello World!\n"))
+
+	lr.Close()
+
+	// Check file content
+	raw_log, err := ioutil.ReadFile(path)
+	assert.Nil(t, err)
+	logContent := string(raw_log)
+
+	assert.Equal(t, int64(19), GetFileSize(path))
+	assert.Equal(t, "aaaaa\nHello World!\n", logContent)
 }
