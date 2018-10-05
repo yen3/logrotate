@@ -71,7 +71,25 @@ func TestPathMetadata(t *testing.T) {
 	}
 }
 
-func TestListLogFiles(t *testing.T) {
-	//ListLogFiles("./test.log", 10)
-	//ListLogFiles("logrotate", 10)
+func TestGenerateLogFilename(t *testing.T) {
+	baseDir := "/tmp"
+	basename := "test"
+	extension := ".log"
+
+	testData := []struct {
+		index int
+		path  string
+	}{
+		{0, "/tmp/test.log"},
+		{1, "/tmp/test-1.log"},
+		{2, "/tmp/test-2.log"},
+		{10000, "/tmp/test-10000.log"},
+	}
+
+	for i := range testData {
+		logPath := GenerateLogFilename(testData[i].index, baseDir, basename, extension)
+		if logPath != testData[i].path {
+			t.Fail()
+		}
+	}
 }

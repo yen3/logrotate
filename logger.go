@@ -39,6 +39,14 @@ func GetFileSize(path string) int64 {
 	return stat.Size()
 }
 
+func GenerateLogFilename(index int, dir string, basename string, extension string) string {
+	if index == 0 {
+		return fmt.Sprintf("%s/%s%s", dir, basename, extension)
+	}
+
+	return fmt.Sprintf("%s/%s-%d%s", dir, basename, index, extension)
+}
+
 func NewPathMetadata(path string) *PathMetadata {
 	absPath, err := filepath.Abs(path)
 	if err != nil {
@@ -90,15 +98,6 @@ func NewLogger(path string, maxFileSize int64, maxBackupFiles int, endEntryMark 
 
 	return lg, nil
 }
-
-func GenerateLogFilename(index int, dir string, basename string, extension string) string {
-	if index == 0 {
-		return fmt.Sprintf("%s/%s%s", dir, basename, extension)
-	}
-
-	return fmt.Sprintf("%s/%s-%d%s", dir, basename, index, extension)
-}
-
 func (lr *File) listPreviousLogFiles() ([]string, error) {
 	var logPaths []string
 	for i := 0; i <= lr.MaxBackupFiles-1; i++ {
