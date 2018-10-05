@@ -383,6 +383,7 @@ func TestStarProcessLog(t *testing.T) {
 	fmt.Println(writeState)
 	assert.True(t, writeState)
 
+	// Check the file content
 	files := []string{
 		"./test_logrotate/test-subprocess-2.log",
 		"./test_logrotate/test-subprocess-1.log",
