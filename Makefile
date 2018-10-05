@@ -1,7 +1,7 @@
 test:
-	@rm -rf test_logrotate
 	@# For check file exists test
 	@mkdir -p test_logrotate
+	@rm -rf test_logrotate/*.log
 	@touch test_logrotate/test-empty.log
 	@touch test_logrotate/test-empty-1.log
 	@touch test_logrotate/test-existing.log

@@ -2,10 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -312,4 +316,73 @@ func TestNewLoggerAppendExistedFile(t *testing.T) {
 
 	assert.Equal(t, int64(19), GetFileSize(path))
 	assert.Equal(t, "aaaaa\nHello World!\n", logContent)
+}
+
+func WriteToRotateFile(logReader *os.File, lr *File, t *testing.T) {
+	for {
+		buf := make([]byte, 128)
+
+		readSize, err := logReader.Read(buf)
+		if err != nil {
+			lr.Close()
+
+			// the pipe is closed
+			if pathError, ok := err.(*os.PathError); ok {
+				if strings.Contains(pathError.Err.Error(), "closed") {
+					return
+				}
+			}
+
+			// The other possible
+			if err == io.EOF {
+				return
+			}
+
+			// Should not happen
+			fmt.Println(err)
+			t.Fail()
+			return
+		}
+
+		buf = buf[0:readSize]
+		lr.Write(buf)
+	}
+}
+
+func TestStarProcessLog(t *testing.T) {
+	lr, err := NewLogger("./test_logrotate/test-subprocess.log", 20, 10)
+	assert.Nil(t, err)
+
+	// Create /dev/null file
+	var devnull *os.File
+	if devnull == nil {
+		devnull, err = os.OpenFile(os.DevNull, os.O_RDWR, 0755)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	logReader, logWriter, err := os.Pipe()
+	assert.Nil(t, err)
+
+	var procAttr os.ProcAttr
+	procAttr.Files = []*os.File{devnull, logWriter, logWriter}
+	go WriteToRotateFile(logReader, lr, t)
+
+	//args := []string{"ping", "-c", "3", "www.google.com"}
+	args := []string{"bash", "-c", "for i in `seq 1 10`; do echo \"Hello World\"; done"}
+	assert.Nil(t, err)
+	args[0], err = exec.LookPath(args[0])
+
+	p, err := os.StartProcess(args[0], args, &procAttr)
+	assert.Nil(t, err)
+
+	// Wait for the process
+	p.Wait()
+
+	logWriter.Close()
+	logReader.Close()
+
+	// Need time to let goroutine aware the pipe is closed
+	time.Sleep(1000 * time.Millisecond)
 }
