@@ -366,7 +366,7 @@ func TestStarProcessLog(t *testing.T) {
 	writeFinished := make(chan bool)
 	go WriteToRotateFile(logReader, lr, writeFinished, t)
 
-	args := []string{"bash", "-c", "for i in `seq 20`; do echo \"Hello World$i\"; done"}
+	args := []string{"bash", "-c", "for i in $(seq 20); do echo \"Hello World$i\"; done"}
 	args[0], err = exec.LookPath(args[0])
 	assert.Nil(t, err)
 
@@ -390,19 +390,23 @@ func TestStarProcessLog(t *testing.T) {
 
 	// Check the file content
 	files := []string{
+		"./test_logrotate/test-subprocess-3.log",
 		"./test_logrotate/test-subprocess-2.log",
 		"./test_logrotate/test-subprocess-1.log",
 		"./test_logrotate/test-subprocess.log",
 	}
-	for i := range files {
+	for i := 1; i < len(files); i++ {
+		// test-subprocess-3.log may not generate in some situation.
 		assert.True(t, IsFileExists(files[i]))
 	}
 
 	var data string
 	for i := range files {
-		raw_data, err := ioutil.ReadFile(files[i])
-		assert.Nil(t, err)
-		data = data + string(raw_data)
+		if IsFileExists(files[i]) {
+			raw_data, err := ioutil.ReadFile(files[i])
+			assert.Nil(t, err)
+			data = data + string(raw_data)
+		}
 	}
 
 	var ansData string
@@ -413,3 +417,10 @@ func TestStarProcessLog(t *testing.T) {
 	assert.True(t, strings.Contains(ansData, data))
 	assert.True(t, strings.Contains(data, "Hello World20\n"))
 }
+
+//func TestSpawnProcess(t *testing.T) {
+//args := []string{"bash", "-c", "for i in $(seq 20); do echo \"Hello World$i\"; done"}
+//err := SpawnProcess(args, "./test_logrotate/test-spawn-process.log", 20, 10)
+
+//assert.Nil(t, err)
+//}

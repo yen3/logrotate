@@ -3,12 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"time"
 )
 
 const sepMark = byte('\n')
@@ -221,83 +218,6 @@ func (lr *File) Write(b []byte) (int, error) {
 	return writeBytes, nil
 }
 
-func writeToRotateFile(logReader *os.File, lr *File, writeFinished chan bool) {
-	for {
-		buf := make([]byte, 128)
-
-		readSize, err := logReader.Read(buf)
-		if err != nil {
-			lr.Close()
-
-			// The write pipe is closed
-			if err == io.EOF {
-				logReader.Close()
-				lr.Close()
-				writeFinished <- true
-				return
-			}
-
-			// Should not happen
-			writeFinished <- false
-			return
-		}
-
-		buf = buf[0:readSize]
-		lr.Write(buf)
-	}
-}
-
-func SpawnProcess(args []string, outputPath string) (err error) {
-	args[0], err = exec.LookPath(args[0])
-	if err != nil {
-		return
-	}
-
-	devnull, err := os.OpenFile(os.DevNull, os.O_RDWR, 0755)
-	if err != nil {
-		return
-	}
-
-	logReader, logWriter, err := os.Pipe()
-	if err != nil {
-		return
-	}
-
-	var procAttr os.ProcAttr
-	procAttr.Files = []*os.File{devnull, logWriter, logWriter}
-	writeFinished := make(chan bool)
-
-	lr, err := NewLogger(outputPath, 10*1024*1024, 10)
-	if err != nil {
-		return
-	}
-	go writeToRotateFile(logReader, lr, writeFinished)
-
-	p, err := os.StartProcess(args[0], args, &procAttr)
-	if err != nil {
-		return
-	}
-
-	_, err = p.Wait()
-	if err != nil {
-		return
-	}
-
-	// Close the pipe
-	logWriter.Close()
-
-	// Wait until the reading is finished, and avoid deadlock
-	select {
-	case writeState := <-writeFinished:
-		if writeState != true {
-			// TODO: fix it
-			return nil
-		}
-		return nil
-	case <-time.After(10 * time.Second):
-		// TODO: fix it
-		return nil
-	}
-
-	return nil
+func main() {
+	fmt.Println("Hello World")
 }
