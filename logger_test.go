@@ -319,30 +319,12 @@ func TestNewLoggerAppendExistedFile(t *testing.T) {
 }
 
 func WriteToRotateFile(logReader *os.File, lr *File, writeFinished chan bool, t *testing.T) {
-	for {
-		buf := make([]byte, 128)
+	io.Copy(lr, logReader)
 
-		readSize, err := logReader.Read(buf)
-		if err != nil {
-			lr.Close()
+	logReader.Close()
+	lr.Close()
 
-			// The write pipe is closed
-			if err == io.EOF {
-				logReader.Close()
-				lr.Close()
-				writeFinished <- true
-				return
-			}
-
-			// Should not happen
-			t.Fail()
-			writeFinished <- false
-			return
-		}
-
-		buf = buf[0:readSize]
-		lr.Write(buf)
-	}
+	writeFinished <- true
 }
 
 func TestStarProcessLog(t *testing.T) {
@@ -377,7 +359,8 @@ func TestStarProcessLog(t *testing.T) {
 	_, err = p.Wait()
 	assert.Nil(t, err)
 
-	// Close the pipe
+	// Important - Close the pipe. If you ignore the line, the test case
+	// would not stop
 	logWriter.Close()
 
 	// Wait until the reading is finished, and avoid deadlock
@@ -395,7 +378,7 @@ func TestStarProcessLog(t *testing.T) {
 		"./test_logrotate/test-subprocess-1.log",
 		"./test_logrotate/test-subprocess.log",
 	}
-	for i := 1; i < len(files); i++ {
+	for i := 2; i < len(files); i++ {
 		// test-subprocess-3.log may not generate in some situation.
 		assert.True(t, IsFileExists(files[i]))
 	}
@@ -417,10 +400,3 @@ func TestStarProcessLog(t *testing.T) {
 	assert.True(t, strings.Contains(ansData, data))
 	assert.True(t, strings.Contains(data, "Hello World20\n"))
 }
-
-//func TestSpawnProcess(t *testing.T) {
-//args := []string{"bash", "-c", "for i in $(seq 20); do echo \"Hello World$i\"; done"}
-//err := SpawnProcess(args, "./test_logrotate/test-spawn-process.log", 20, 10)
-
-//assert.Nil(t, err)
-//}

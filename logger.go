@@ -195,6 +195,7 @@ func (lr *File) truncateWriteFile(b []byte) ([]byte, error) {
 }
 
 func (lr *File) Write(b []byte) (int, error) {
+	bSize := len(b)
 	buf := b
 	var err error
 
@@ -209,13 +210,13 @@ func (lr *File) Write(b []byte) (int, error) {
 	// Write the file
 	writeBytes, err := lr.File.Write(buf)
 	if err != nil {
-		return writeBytes, err
+		return bSize, err
 	}
 
 	// Update filesize
 	lr.currentFileSize += int64(writeBytes)
 
-	return writeBytes, nil
+	return bSize, nil
 }
 
 func main() {
